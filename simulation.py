@@ -42,7 +42,7 @@ class Simulation:
         self.end_sample_time = None
         self.equity_overtime = []
 
-    def test(self):
+    def run(self):
         failed = None
         for file in self.files:
             try:
@@ -57,7 +57,6 @@ class Simulation:
             else:
                 self.set_times()
             filtered = self.get_filtered_options()
-            wdb.set_trace()
             while not filtered.empty:
                 self.add_positions(filtered)
                 self.mark_portfolio()
@@ -69,7 +68,6 @@ class Simulation:
                 print(f'portfolio delta: {self.portfolio_delta}')
                 print(f'cash: {self.cash}, equity: {self.equity}, liabilities: ${self.liabilities}')
                 filtered = self.get_filtered_options()
-                #wdb.set_trace()
 
     def allocate_funds(self, option, cash):
         option_series = option if (isinstance(option, pd.Series)) else option.iloc[0]
@@ -113,7 +111,7 @@ class Simulation:
                     to_drop.append(i)
         self.positions.drop(to_drop, inplace=True)
         if len(to_drop) > 0:
-            print('\033[96m'+f'closed out {len(to_drop)} positions')
+            print('\033[96m'+f'closed out {len(to_drop)} positions'+'\033[0m')
         self.update_state()
 
 
@@ -242,4 +240,4 @@ class Simulation:
         self.update_state()
 
 s = Simulation()
-s.test()
+s.run()
