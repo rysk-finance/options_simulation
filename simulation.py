@@ -208,7 +208,7 @@ class Simulation:
     def get_portfolio_return_df(self):
         portfolio = pd.DataFrame(self.equity_overtime)
         portfolio = portfolio.set_index('timestamp')
-        daily_portfolio = portfolio.resample('d').last()
+        daily_portfolio = portfolio.between_time('3:0', '5:0')
         daily_portfolio['daily_return'] = daily_portfolio['equity'].pct_change()
         return daily_portfolio
 
