@@ -205,6 +205,21 @@ class Simulation:
     def get_profitable_positions(self):
         return self.positions[self.positions['p/l'] > 0].sort_values(by='p/l', ascending=False)
 
+    def get_portfolio_return_df(self):
+        portfolio = pd.DataFrame(self.equity_overtime)
+        portfolio = portfolio.set_index('timestamp')
+        daily_portfolio = portfolio.resample('d').last()
+        daily_portfolio['daily_return'] = daily_portfolio['equity'].pct_change()
+        return daily_portfolio
+
+    def get_portfolio_return_metrics(self):
+        portfolio = self.get_portfolio_return_df()
+        daily_volatility = portfolio['daily_return'].std()
+        average_daily_return = portfolio['daily_return'].mean()
+        sharpe = average_daily_return / daily_volatility
+        annual_sharpe = (365**0.5) * sharpe
+
+
     def mark_portfolio(self):
         filtered = self.get_filtered_options(time_only=True)
         for i, row in self.positions.iterrows():
