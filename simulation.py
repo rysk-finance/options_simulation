@@ -90,7 +90,7 @@ class Simulation:
                     self.mark_portfolio()
                     self.find_and_close_positions()
                     self.mark_portfolio()
-                    self.timestamp_equity()
+                    self.timestamp_statistics()
                     self.set_times()
                     print(f'current time: {self.current_time}')
                     print(f'portfolio delta: {self.portfolio_delta}')
