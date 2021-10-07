@@ -4,13 +4,16 @@ import time
 import datetime
 from glob import glob
 import math
+import matplotlib.pyplot as plt
 import wdb
 from storage import add_to_corrupted_files
 import faulthandler
 
 pd.options.mode.chained_assignment = None
 
-COLUMNS = ["symbol", "timestamp", "type", "strike_price", "expiration", "underlying_price", "bid_price", "bid_amount", "ask_price", "ask_amount", "mark_price", "delta", "theta"]
+COLUMNS = ["symbol", "timestamp", "type", "strike_price", "expiration", "underlying_price", "bid_price", "bid_amount",
+           "ask_price", "ask_amount", "mark_price", "delta", "theta"]
+
 COLUM_TYPES = {
     'symbol': str,
     'timestamp': int,
@@ -26,23 +29,31 @@ COLUM_TYPES = {
     'delta': float,
     'theta': float
 }
+
 def ensure_option_series(option):
     return option if (isinstance(option, pd.Series)) else option.iloc[0]
+
 
 def negative_deltas(df):
     return df[df.delta < 0]
 
+
 def positive_deltas(df):
     return df[df.delta > 0]
 
+
 def filter_deltas(df):
-  return df[((df.delta > -0.50) & (df.delta < -0.25)) | ((df.delta < 0.5) & (df.delta > 0.25))]
+    return df[((df.delta > -0.50) & (df.delta < -0.25)) | ((df.delta < 0.5) & (df.delta > 0.25))]
+
 
 def filter_expiration(df):
-  return df[(df['days_to_expiration'] > datetime.timedelta(days=45)) & (df['days_to_expiration'] < datetime.timedelta(days=70))]
+    return df[(df['days_to_expiration'] > datetime.timedelta(days=45)) & (
+                df['days_to_expiration'] < datetime.timedelta(days=70))]
+
 
 def filter_datetime(df, start, end):
     return df[(df['datetime'] >= start) & (df['datetime'] <= end)]
+
 
 class Simulation:
     def __init__(self, starting_capital=1000000, max_epoch_allocation=0.10):
@@ -53,11 +64,12 @@ class Simulation:
         self.equity = starting_capital
         self.max_epoch_allocation = max_epoch_allocation
         self.portfolio_delta = 0
-        self.positions = pd.DataFrame(columns=COLUMNS + ['num_contracts', 'position_delta', 'collateral_locked', 'liability_amount', 'position_open_price', 'p/l'])
+        self.positions = pd.DataFrame(
+            columns=COLUMNS + ['num_contracts', 'position_delta', 'collateral_locked', 'liability_amount', 'position_open_price', 'p/l'])
         self.files = self.get_files()
         self.current_time = None
         self.end_sample_time = None
-        self.equity_overtime = []
+        self.statistics_overtime = []
 
     def run(self):
         faulthandler.enable()
@@ -89,6 +101,7 @@ class Simulation:
                 add_to_corrupted_files(file)
                 failed = True
                 continue
+        self.plot()
 
     def allocate_funds(self, option, cash):
         option_series = option if (isinstance(option, pd.Series)) else option.iloc[0]
@@ -113,7 +126,7 @@ class Simulation:
 
         if self.portfolio_delta >= 0:
             # deltas will be inverted due to writing
-            sample  = positive.sample()
+            sample = positive.sample()
             self.delta_hedge_from_series(sample, deployable_cash)
         else:
             sample = negative.sample()
@@ -132,9 +145,8 @@ class Simulation:
                     to_drop.append(i)
         self.positions.drop(to_drop, inplace=True)
         if len(to_drop) > 0:
-            print('\033[96m'+f'closed out {len(to_drop)} positions'+'\033[0m')
+            print('\033[96m' + f'closed out {len(to_drop)} positions' + '\033[0m')
         self.update_state()
-
 
     def delta_hedge_from_series(self, option, cash):
         option_series = option if (isinstance(option, pd.Series)) else option.iloc[0]
@@ -144,7 +156,8 @@ class Simulation:
         contracts_threshold = math.floor(cash / required_collateral)
         contracts = contracts if contracts <= contracts_threshold else contracts_threshold
         if contracts > 0:
-            contracts = contracts if (contracts <= option_series['bid_amount']) else math.floor(option_series['bid_amount'])
+            contracts = contracts if (contracts <= option_series['bid_amount']) else math.floor(
+                option_series['bid_amount'])
         else:
             return
         self.write_allocation(option, contracts)
@@ -195,7 +208,7 @@ class Simulation:
         return clone.sort_values(by='timestamp')
 
     def get_files(self):
-        files = glob("./datasets/*.csv.gz")
+        files = glob("datasets/*.csv.gz")
         files.sort()
         return files
 
@@ -233,7 +246,8 @@ class Simulation:
             self.positions.at[i, 'ask_price'] = filtered_row['ask_price']
             self.positions.at[i, 'days_to_expiration'] = filtered_row['expiration_datetime'] - self.current_time
         self.positions['position_delta'] = self.positions['num_contracts'] * self.positions['delta']
-        self.positions['liability_amount'] = abs(self.positions['num_contracts'] * self.positions['mark_price'] * self.positions['underlying_price'])
+        self.positions['liability_amount'] = abs(
+            self.positions['num_contracts'] * self.positions['mark_price'] * self.positions['underlying_price'])
         self.update_state()
 
     def pick_to_delta_neutral(self, options, positive_delta=True):
@@ -255,8 +269,14 @@ class Simulation:
 
         self.end_sample_time = self.current_time + pd.DateOffset(minutes=30)
 
-    def timestamp_equity(self):
-        self.equity_overtime.append({ 'timestamp': self.current_time, 'equity': self.equity })
+    def timestamp_statistics(self):
+        self.statistics_overtime.append({
+            'timestamp': self.current_time,
+            'equity': self.equity,
+            'cash': self.cash,
+            'liabilities': self.liabilities,
+            'collateral_locked': self.collateral_locked
+        })
 
     def update_equity(self):
         self.equity = self.cash + self.collateral_locked - self.liabilities
@@ -281,14 +301,22 @@ class Simulation:
         allocation_amount = contracts * self.get_collateral_required(option_series)
         premium_received = contracts * bid_price_usd
         # invert signs for writing
-        option_series['num_contracts'] = option_series['num_contracts'] + -(contracts) if 'num_contracts' in option_series else -(contracts)
+        option_series['num_contracts'] = option_series['num_contracts'] + -(
+            contracts) if 'num_contracts' in option_series else -(contracts)
         option_series['position_delta'] = -(contracts * option_series['delta'])
         option_series['collateral_locked'] = allocation_amount
-        option_series['liability_amount'] = abs(contracts * option_series['mark_price'] * option_series['underlying_price'])
+        option_series['liability_amount'] = abs(
+            contracts * option_series['mark_price'] * option_series['underlying_price'])
         option_series['position_open_price'] = option_series['mark_price']
         self.positions = self.positions.append(option_series)
         self.cash = float(self.cash - allocation_amount + premium_received)
         self.update_state()
+
+    def plot(self):
+        stats = pd.DataFrame(self.statistics_overtime)
+        for col in stats.columns[1:]:
+            ax = stats.plot(stats.index[0], col)
+            plt.show()
 
 s = Simulation()
 s.run()
