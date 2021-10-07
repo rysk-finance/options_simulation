@@ -6,7 +6,7 @@ from glob import glob
 import math
 import matplotlib.pyplot as plt
 import wdb
-from storage import add_to_corrupted_files
+from storage import add_to_corrupted_files, add_to_results_files
 import faulthandler
 
 pd.options.mode.chained_assignment = None
@@ -83,8 +83,8 @@ class Simulation:
                 else:
                     self.set_times()
                 filtered = self.get_filtered_options()
-                if self.portfolio_delta >= 200 or self.portfolio_delta <= -200:
-                    wdb.set_trace()
+                #if self.portfolio_delta >= 200 or self.portfolio_delta <= -200:
+                #    wdb.set_trace()
                 while not filtered.empty:
                     self.add_positions(filtered)
                     self.mark_portfolio()
@@ -102,6 +102,7 @@ class Simulation:
                 failed = True
                 continue
         self.plot()
+        add_to_results_files(self.statistics_overtime)
 
     def allocate_funds(self, option, cash):
         option_series = option if (isinstance(option, pd.Series)) else option.iloc[0]
