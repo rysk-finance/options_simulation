@@ -316,7 +316,7 @@ class Simulation:
         stats = pd.DataFrame(self.statistics_overtime)
         for col in stats.columns[1:]:
             ax = stats.plot(stats.index[0], col)
-            plt.show()
+            plt.savefig('results.png', bbox_inches='tight')
 
 s = Simulation()
 s.run()
