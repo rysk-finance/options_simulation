@@ -6,12 +6,29 @@ from glob import glob
 import math
 import matplotlib.pyplot as plt
 import wdb
+from storage import add_to_corrupted_files
+import faulthandler
 
 pd.options.mode.chained_assignment = None
 
 COLUMNS = ["symbol", "timestamp", "type", "strike_price", "expiration", "underlying_price", "bid_price", "bid_amount",
            "ask_price", "ask_amount", "mark_price", "delta", "theta"]
 
+COLUM_TYPES = {
+    'symbol': str,
+    'timestamp': int,
+    'type': str,
+    'strike_price': float,
+    'expiration': int,
+    'underlying_price': float,
+    'bid_price': float,
+    'bid_amount': float,
+    'ask_price': float,
+    'ask_amount': float,
+    'mark_price': float,
+    'delta': float,
+    'theta': float
+}
 
 def ensure_option_series(option):
     return option if (isinstance(option, pd.Series)) else option.iloc[0]
@@ -48,38 +65,42 @@ class Simulation:
         self.max_epoch_allocation = max_epoch_allocation
         self.portfolio_delta = 0
         self.positions = pd.DataFrame(
-            columns=COLUMNS + ['num_contracts', 'position_delta', 'collateral_locked', 'liability_amount'])
+            columns=COLUMNS + ['num_contracts', 'position_delta', 'collateral_locked', 'liability_amount', 'position_open_price', 'p/l'])
         self.files = self.get_files()
         self.current_time = None
         self.end_sample_time = None
         self.statistics_overtime = []
 
     def run(self):
+        faulthandler.enable()
         failed = None
         for file in self.files:
             try:
                 self.load_file_to_dataframe(file)
+                if failed:
+                    self.set_times(override=True)
+                    failed = None
+                else:
+                    self.set_times()
+                filtered = self.get_filtered_options()
+                if self.portfolio_delta >= 200 or self.portfolio_delta <= -200:
+                    wdb.set_trace()
+                while not filtered.empty:
+                    self.add_positions(filtered)
+                    self.mark_portfolio()
+                    self.find_and_close_positions()
+                    self.mark_portfolio()
+                    self.timestamp_equity()
+                    self.set_times()
+                    print(f'current time: {self.current_time}')
+                    print(f'portfolio delta: {self.portfolio_delta}')
+                    print(f'cash: {self.cash}, equity: {self.equity}, liabilities: ${self.liabilities}')
+                    filtered = self.get_filtered_options()
             except:
                 print(f'loading {file} failed')
+                add_to_corrupted_files(file)
                 failed = True
                 continue
-            if failed:
-                self.set_times(override=True)
-                failed = None
-            else:
-                self.set_times()
-            filtered = self.get_filtered_options()
-            while not filtered.empty:
-                self.add_positions(filtered)
-                self.mark_portfolio()
-                self.find_and_close_positions()
-                self.mark_portfolio()
-                self.timestamp_statistics()
-                self.set_times()
-                print(f'current time: {self.current_time}')
-                print(f'portfolio delta: {self.portfolio_delta}')
-                print(f'cash: {self.cash}, equity: {self.equity}, liabilities: ${self.liabilities}')
-                filtered = self.get_filtered_options()
         self.plot()
 
     def allocate_funds(self, option, cash):
@@ -143,7 +164,7 @@ class Simulation:
 
     def load_file_to_dataframe(self, file_path):
         t = time.process_time()
-        df = pd.read_csv(file_path, compression='gzip', usecols=COLUMNS)
+        df = pd.read_csv(file_path, compression='gzip', usecols=COLUMNS, dtype=COLUM_TYPES, engine='c', float_precision="legacy")
         eth_only = df[df['symbol'].str.contains("ETH")]
         eth_only['datetime'] = pd.to_datetime(eth_only['timestamp'] * 1000)
         eth_only['expiration_datetime'] = pd.to_datetime(eth_only['expiration'] * 1000)
@@ -155,13 +176,18 @@ class Simulation:
 
     def find_and_close_positions(self):
         # under 45 days gamma becomes high
-        expiring = self.get_short_expiration_positions()
+        picked_options = self.get_short_expiration_positions()
+        # append profitable positions as second stage to drive towards delta 0
+        picked_options.append(self.get_profitable_positions())
         if self.portfolio_delta >= 0:
-            expiring = positive_deltas(expiring)
+            picked_options = positive_deltas(picked_options)
+            picked_options = self.pick_to_delta_neutral(picked_options, positive_delta=True)
         else:
-            expiring = negative_deltas(expiring)
-        if not expiring.empty:
-            self.close_positions(expiring)
+            picked_options = negative_deltas(picked_options)
+            picked_options = self.pick_to_delta_neutral(picked_options, positive_delta=False)
+
+        if not picked_options.empty:
+            self.close_positions(picked_options)
 
     def get_collateral_required(self, option_series):
         option_series = ensure_option_series(option_series)
@@ -174,8 +200,7 @@ class Simulation:
 
     def get_filtered_options(self, time_only=False):
         # get current slice of datetime in order book
-        clone = self.current_day_orderbook.copy()
-        clone = filter_datetime(clone, self.current_time, self.end_sample_time)
+        clone = filter_datetime(self.current_day_orderbook, self.current_time, self.end_sample_time)
         if time_only:
             return clone.sort_values(by='timestamp')
         clone = filter_deltas(clone)
@@ -190,6 +215,24 @@ class Simulation:
     def get_short_expiration_positions(self, days=45):
         return self.positions[self.positions['days_to_expiration'] < datetime.timedelta(days=days)]
 
+    def get_profitable_positions(self):
+        return self.positions[self.positions['p/l'] > 0].sort_values(by='p/l', ascending=False)
+
+    def get_portfolio_return_df(self):
+        portfolio = pd.DataFrame(self.equity_overtime)
+        portfolio = portfolio.set_index('timestamp')
+        daily_portfolio = portfolio.between_time('3:0', '5:0')
+        daily_portfolio['daily_return'] = daily_portfolio['equity'].pct_change()
+        return daily_portfolio
+
+    def get_portfolio_return_metrics(self):
+        portfolio = self.get_portfolio_return_df()
+        daily_volatility = portfolio['daily_return'].std()
+        average_daily_return = portfolio['daily_return'].mean()
+        sharpe = average_daily_return / daily_volatility
+        annual_sharpe = (365**0.5) * sharpe
+
+
     def mark_portfolio(self):
         filtered = self.get_filtered_options(time_only=True)
         for i, row in self.positions.iterrows():
@@ -198,6 +241,7 @@ class Simulation:
             filtered_row = filtered.loc[f_idx]
             self.positions.at[i, 'delta'] = filtered_row['delta']
             self.positions.at[i, 'mark_price'] = filtered_row['mark_price']
+            self.positions.at[i, 'p/l'] = (filtered_row['mark_price'] - row['position_open_price']) / row['position_open_price']
             self.positions.at[i, 'underlying_price'] = filtered_row['underlying_price']
             self.positions.at[i, 'ask_price'] = filtered_row['ask_price']
             self.positions.at[i, 'days_to_expiration'] = filtered_row['expiration_datetime'] - self.current_time
@@ -205,6 +249,15 @@ class Simulation:
         self.positions['liability_amount'] = abs(
             self.positions['num_contracts'] * self.positions['mark_price'] * self.positions['underlying_price'])
         self.update_state()
+
+    def pick_to_delta_neutral(self, options, positive_delta=True):
+        new_delta = self.portfolio_delta
+        picked_options = pd.DataFrame()
+        for i, row in options.iterrows():
+            if (positive_delta and new_delta > 0) or (not positive_delta and new_delta < 0):
+                picked_options.append(row)
+                new_delta = new_delta - row['position_delta']
+        return picked_options
 
     def set_times(self, override=False):
         first_time = self.current_day_orderbook.iloc[0]['datetime']
@@ -254,6 +307,7 @@ class Simulation:
         option_series['collateral_locked'] = allocation_amount
         option_series['liability_amount'] = abs(
             contracts * option_series['mark_price'] * option_series['underlying_price'])
+        option_series['position_open_price'] = option_series['mark_price']
         self.positions = self.positions.append(option_series)
         self.cash = float(self.cash - allocation_amount + premium_received)
         self.update_state()

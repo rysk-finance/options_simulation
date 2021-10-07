@@ -1,9 +1,13 @@
+aiofiles==0.4.0
+aiohttp==3.7.4.post0
 appdirs==1.4.4
+async-timeout==3.0.1
 attrs==20.3.0
 autoflake==1.4
 black==20.8b1
 cachetools==4.2.0
 certifi==2020.12.5
+chardet==4.0.0
 click==7.1.2
 cycler==0.10.0
 h11==0.12.0
@@ -20,6 +24,7 @@ kiwisolver==1.3.1
 log-colorizer==1.8.6
 MarkupSafe==1.1.1
 matplotlib==3.3.3
+multidict==5.2.0
 mypy-extensions==0.4.3
 numpy==1.19.5
 openapi-client==1.0.0
@@ -33,6 +38,7 @@ pydantic==1.7.3
 pyflakes==2.2.0
 pyparsing==2.4.7
 python-dateutil==2.8.1
+python-dotenv==0.19.0
 python-magic==0.4.24
 pytz==2021.1
 PyYAML==5.4.1
@@ -43,8 +49,10 @@ scipy==1.6.0
 shellingham==1.3.2
 six==1.15.0
 sniffio==1.2.0
+sortedcontainers==2.4.0
 spark-parser==1.8.9
 stringcase==1.2.0
+tardis-dev==2.0.0a8
 threadpoolctl==2.1.0
 toml==0.10.2
 tornado==5.1.1
@@ -57,4 +65,5 @@ urllib3==1.26.2
 wdb==3.3.0
 wdb.server==3.3.0
 xdis==5.0.13
+yarl==1.6.3
 zipp==3.4.0
