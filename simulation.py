@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import wdb
 from storage import add_to_corrupted_files, add_to_results_files
 import faulthandler
+from analysis import generate_risk_return_metrics_historical
 
 pd.options.mode.chained_assignment = None
 
@@ -103,6 +104,7 @@ class Simulation:
                 continue
         self.plot()
         add_to_results_files(self.statistics_overtime)
+        print(generate_risk_return_metrics_historical()[-1])
 
     def allocate_funds(self, option, cash):
         option_series = option if (isinstance(option, pd.Series)) else option.iloc[0]
@@ -222,7 +224,7 @@ class Simulation:
     def get_portfolio_return_df(self):
         portfolio = pd.DataFrame(self.equity_overtime)
         portfolio = portfolio.set_index('timestamp')
-        daily_portfolio = portfolio.between_time('3:0', '5:0')
+        daily_portfolio = portfolio.resample('d').mean()
         daily_portfolio['daily_return'] = daily_portfolio['equity'].pct_change()
         return daily_portfolio
 
