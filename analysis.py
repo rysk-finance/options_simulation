@@ -2,6 +2,7 @@ from storage import get_results
 import cryptocompare
 import pandas as pd
 from empyrical import max_drawdown, alpha_beta
+import matplotlib.pyplot as plt
 
 def generate_risk_return_metrics_historical():
     underlying = get_daily_returns_underlying()
@@ -45,6 +46,13 @@ def generate_risk_return_metrics_historical():
         }
     return results
 
+def generate_return_plots():
+    results = get_results()
+    for i, result in enumerate(results):
+        equity = [x['equity'] for x in result]
+        timeline = [x['timestamp'] for x in result]
+        plt.plot(timeline, equity)
+        plt.savefig(f'./plots/equity{i}.png', bbox_inches='tight')
 
 def get_daily_returns_underlying():
     eth_daily = cryptocompare.get_historical_price_day('ETH')
