@@ -20,6 +20,9 @@ def add_to_results_files(stats):
     with open(RESULTS_FILE,'wb') as wfp:
         pickle.dump(results, wfp)
 
+def get_results():
+    return get_data_from_file(RESULTS_FILE)
+
 def remove_corrupted_file(file):
     files = get_corrupted_files()
     files.remove(file)
