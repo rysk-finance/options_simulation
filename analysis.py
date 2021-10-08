@@ -12,10 +12,10 @@ def generate_risk_return_metrics_historical():
         result['time'] = pd.to_datetime(result['timestamp'])
         result = result.set_index('time')
         result = result.resample('d').mean()
-        merged = result.join(underlying[['date', 'daily_change', 'close']].dropna())
+        merged = result.join(underlying[['date', 'daily_change', 'open']].dropna())
         merged.rename(columns={'daily_change':'daily_return_underlying', 'open': 'open_underlying'}, inplace=True)
         merged['daily_return'] = merged['equity'].pct_change()
-        merged = merged.dropna()
+        merged.dropna(inplace=True)
         # compare underlying and portfolio
         daily_volatility = merged['daily_return'].std()
         daily_volatility_underlying = merged['daily_return_underlying'].std()
@@ -26,9 +26,8 @@ def generate_risk_return_metrics_historical():
         max_dd = max_drawdown(merged['daily_return'])
         max_dd_underlying = max_drawdown(merged['daily_return_underlying'])
         alpha, beta = alpha_beta(merged['daily_return'], merged['daily_return_underlying'])
-        # calc total return
-        total_return = (merged.iloc[-1]['equity'] - merged.iloc[0]['equity']) / merged.iloc[0]['equity']
-        total_return_underlying = (merged.iloc[-1]['open_underlying'] - merged.iloc[0]['open_underlying']) / merged.iloc[0]['open_underlying']
+        total_return = (merged['equity'].iloc[-1] - merged['equity'].iloc[0]) / merged['equity'].iloc[0]
+        total_return_underlying = (merged['open_underlying'].iloc[-1] - merged['open_underlying'].iloc[0]) / merged['open_underlying'].iloc[0]
         results[i] = {
             'data': merged,
             'alpha': alpha,
