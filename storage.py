@@ -38,7 +38,7 @@ def get_corrupted_files():
 def get_data_from_file(file):
     data = None
     with open(file, 'rb') as f:
-        files = pickle.load(f)
+        data = pickle.load(f)
     return data
 
 def get_date_from_filename(fn):
