@@ -9,11 +9,12 @@ import wdb
 from storage import add_to_corrupted_files, add_to_results_files
 import faulthandler
 from analysis import generate_risk_return_metrics_historical
+from calculations.black_scholes import BlackScholes
 
 pd.options.mode.chained_assignment = None
 
 COLUMNS = ["symbol", "timestamp", "type", "strike_price", "expiration", "underlying_price", "bid_price", "bid_amount",
-           "ask_price", "ask_amount", "mark_price", "delta", "theta"]
+           "ask_price", "ask_amount", "mark_price", "mark_iv", "delta", "theta"]
 
 COLUM_TYPES = {
     'symbol': str,
@@ -57,7 +58,7 @@ def filter_datetime(df, start, end):
 
 
 class Simulation:
-    def __init__(self, starting_capital=1000000, max_epoch_allocation=0.10):
+    def __init__(self, starting_capital=1000000, max_epoch_allocation=0.10, risk_free_rate=0.015):
         self.cash = starting_capital
         self.assets = 0
         self.liabilities = 0
@@ -70,6 +71,9 @@ class Simulation:
         self.files = self.get_files()
         self.current_time = None
         self.end_sample_time = None
+        # Use to check if any options significantly deviate
+        self.median_iv = None
+        self.risk_free = risk_free_rate
         self.statistics_overtime = []
 
     def run(self):
@@ -174,6 +178,7 @@ class Simulation:
         eth_only['days_to_expiration'] = eth_only['expiration_datetime'] - eth_only['datetime']
         eth_only.dropna(inplace=True)
         self.current_day_orderbook = eth_only
+        self.median_iv = eth_only['mark_iv'].median()
         elapsed_time = time.process_time() - t
         print(f'{file_path} loaded in {elapsed_time} seconds')
 
@@ -242,12 +247,27 @@ class Simulation:
             symbol = row['symbol']
             f_idx = filtered.symbol.eq(symbol).idxmax()
             filtered_row = filtered.loc[f_idx]
-            self.positions.at[i, 'delta'] = filtered_row['delta']
-            self.positions.at[i, 'mark_price'] = filtered_row['mark_price']
+            self.positions.at[i, 'mark_iv'] = filtered_row['mark_iv']
+            days_to_expiration = filtered_row['expiration_datetime'] - self.current_time
+            years_to_expiration = days_to_expiration / 365.25
+            if abs(filtered_row['mark_iv'] - self.median_iv) > 100:
+                bs = BlackScholes(
+                    row['type'],
+                    filtered_row['underlying_price'],
+                    row['strike_price'],
+                    self.risk_free,
+                    years_to_expiration,
+                    self.median_iv / 100
+                )
+                self.positions.at[i, 'delta'] = bs.delta()
+                self.positions.at[i, 'mark_price'] = bs.get_price()
+            else:
+                self.positions.at[i, 'delta'] = filtered_row['delta']
+                self.positions.at[i, 'mark_price'] = filtered_row['mark_price']
             self.positions.at[i, 'p/l'] = (filtered_row['mark_price'] - row['position_open_price']) / row['position_open_price']
             self.positions.at[i, 'underlying_price'] = filtered_row['underlying_price']
             self.positions.at[i, 'ask_price'] = filtered_row['ask_price']
-            self.positions.at[i, 'days_to_expiration'] = filtered_row['expiration_datetime'] - self.current_time
+            self.positions.at[i, 'days_to_expiration'] = days_to_expiration
         self.positions['position_delta'] = self.positions['num_contracts'] * self.positions['delta']
         self.positions['liability_amount'] = abs(
             self.positions['num_contracts'] * self.positions['mark_price'] * self.positions['underlying_price'])
@@ -298,6 +318,7 @@ class Simulation:
         self.update_liabilities()
         self.update_collateral_locked()
         self.update_equity()
+
 
     def write_allocation(self, option_series, contracts):
         bid_price_usd = option_series['bid_price'] * option_series['underlying_price']

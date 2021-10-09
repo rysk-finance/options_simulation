@@ -52,6 +52,7 @@ def generate_return_plots():
         timeline = [x['timestamp'] for x in result]
         plt.plot(timeline, equity)
         plt.savefig(f'./plots/equity{i}.png', bbox_inches='tight')
+        plt.close()
 
 def get_daily_returns_underlying():
     eth_daily = cryptocompare.get_historical_price_day('ETH')
