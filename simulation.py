@@ -263,7 +263,7 @@ class Simulation:
                     self.median_iv / 100
                 )
                 self.positions.at[i, 'delta'] = bs.delta()
-                self.positions.at[i, 'mark_price'] = bs.get_price()
+                self.positions.at[i, 'mark_price'] = bs.get_price() / filtered_row['underlying_price']
             else:
                 self.positions.at[i, 'delta'] = filtered_row['delta']
                 self.positions.at[i, 'mark_price'] = filtered_row['mark_price']
