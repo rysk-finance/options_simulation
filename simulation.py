@@ -32,6 +32,9 @@ COLUM_TYPES = {
     'theta': float
 }
 
+def percent_difference_ask_bid(series):
+    return (series['ask_price'] - series['bid_price']) / series['bid_price']
+
 def ensure_option_series(option):
     return option if (isinstance(option, pd.Series)) else option.iloc[0]
 
@@ -250,7 +253,7 @@ class Simulation:
             self.positions.at[i, 'mark_iv'] = filtered_row['mark_iv']
             days_to_expiration = filtered_row['expiration_datetime'] - self.current_time
             years_to_expiration = days_to_expiration / 365.25
-            if abs(filtered_row['mark_iv'] - self.median_iv) > 100:
+            if percent_difference_ask_bid(filtered_row) > 1:
                 bs = BlackScholes(
                     row['type'],
                     filtered_row['underlying_price'],
