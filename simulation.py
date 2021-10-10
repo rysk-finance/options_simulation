@@ -188,7 +188,8 @@ class Simulation:
                 self.median_iv / 100
             )
             row['delta'] = bs.delta()
-            row['mark_price'] = bs.get_price()
+            bs_price = bs.get_price()
+            row['mark_price'] = bs_price if bs_price > row['bid_price'] else row['bid_price']
         return row
 
     def load_file_to_dataframe(self, file_path):
