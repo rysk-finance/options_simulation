@@ -32,8 +32,8 @@ COLUM_TYPES = {
     'theta': float
 }
 
-def percent_difference_ask_bid(series):
-    return (series['ask_price'] - series['bid_price']) / series['bid_price']
+def percent_difference_ask_bid(row):
+    return (row['ask_price'] - row['bid_price']) / row['bid_price']
 
 def ensure_option_series(option):
     return option if (isinstance(option, pd.Series)) else option.iloc[0]
@@ -121,7 +121,8 @@ class Simulation:
         contracts = contracts if (contracts <= option_series['bid_amount']) else math.floor(option_series['bid_amount'])
         self.write_allocation(option_series, contracts)
 
-    def add_positions(self, filtered_book):
+    def add_positions(self, book):
+        filtered_book = book.apply(self.ensure_mark_pricing, axis=1)
         # add some variance by drawing at random from filtered down set
         positive = positive_deltas(filtered_book)
         negative = negative_deltas(filtered_book)
@@ -171,6 +172,22 @@ class Simulation:
         else:
             return
         self.write_allocation(option, contracts)
+
+    def ensure_mark_pricing(row):
+        if percent_difference_ask_bid(row) > 1:
+            days_to_expiration = row['expiration_datetime'] - self.current_time
+            years_to_expiration = days_to_expiration / 365.25
+            bs = BlackScholes(
+                row['type'],
+                row['underlying_price'],
+                row['strike_price'],
+                self.risk_free,
+                years_to_expiration,
+                self.median_iv / 100
+            )
+            row['delta'] = bs.delta()
+            row['mark_price'] = bs.get_price()
+            return row
 
     def load_file_to_dataframe(self, file_path):
         t = time.process_time()
