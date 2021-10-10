@@ -38,6 +38,8 @@ def percent_difference_ask_bid(row):
 def ensure_option_series(option):
     return option if (isinstance(option, pd.Series)) else option.iloc[0]
 
+def timedelta_to_float(days_to_expiration):
+    return days_to_expiration.total_seconds() // (3600*24)
 
 def negative_deltas(df):
     return df[df.delta < 0]
@@ -173,10 +175,10 @@ class Simulation:
             return
         self.write_allocation(option, contracts)
 
-    def ensure_mark_pricing(row):
+    def ensure_mark_pricing(self, row):
         if percent_difference_ask_bid(row) > 1:
             days_to_expiration = row['expiration_datetime'] - self.current_time
-            years_to_expiration = days_to_expiration / 365.25
+            years_to_expiration = timedelta_to_float(days_to_expiration) / 365.25
             bs = BlackScholes(
                 row['type'],
                 row['underlying_price'],
@@ -187,7 +189,7 @@ class Simulation:
             )
             row['delta'] = bs.delta()
             row['mark_price'] = bs.get_price()
-            return row
+        return row
 
     def load_file_to_dataframe(self, file_path):
         t = time.process_time()
@@ -269,7 +271,7 @@ class Simulation:
             filtered_row = filtered.loc[f_idx]
             self.positions.at[i, 'mark_iv'] = filtered_row['mark_iv']
             days_to_expiration = filtered_row['expiration_datetime'] - self.current_time
-            years_to_expiration = days_to_expiration / 365.25
+            years_to_expiration = timedelta_to_float(days_to_expiration) / 365.25
             if percent_difference_ask_bid(filtered_row) > 1:
                 bs = BlackScholes(
                     row['type'],
