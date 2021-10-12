@@ -189,7 +189,8 @@ class Simulation:
             )
             row['delta'] = bs.delta()
             bs_price = bs.get_price()
-            row['mark_price'] = bs_price if bs_price > row['bid_price'] else row['bid_price']
+            mark_price = bs_price / row['underlying_price']
+            row['mark_price'] = mark_price if mark_price > row['bid_price'] else row['bid_price']
         return row
 
     def load_file_to_dataframe(self, file_path):
@@ -283,7 +284,8 @@ class Simulation:
                     self.median_iv / 100
                 )
                 self.positions.at[i, 'delta'] = bs.delta()
-                self.positions.at[i, 'mark_price'] = bs.get_price() / filtered_row['underlying_price']
+                mark_price = bs.get_price() / filtered_row['underlying_price']
+                self.positions.at[i, 'mark_price'] = mark_price if mark_price > filtered_row['bid_price'] else row['bid_price']
             else:
                 self.positions.at[i, 'delta'] = filtered_row['delta']
                 self.positions.at[i, 'mark_price'] = filtered_row['mark_price']
