@@ -6,6 +6,7 @@ from glob import glob
 import math
 import matplotlib.pyplot as plt
 import wdb
+from wdb import trace
 from storage import add_to_corrupted_files, add_to_results_files
 import faulthandler
 from analysis import generate_risk_return_metrics_historical
@@ -84,36 +85,40 @@ class Simulation:
     def run(self):
         faulthandler.enable()
         failed = None
-        for file in self.files:
-            try:
-                self.load_file_to_dataframe(file)
-                if failed:
-                    self.set_times(override=True)
-                    failed = None
-                else:
-                    self.set_times()
-                filtered = self.get_filtered_options()
-                #if self.portfolio_delta >= 200 or self.portfolio_delta <= -200:
-                #    wdb.set_trace()
-                while not filtered.empty:
-                    self.add_positions(filtered)
-                    self.mark_portfolio()
-                    self.find_and_close_positions()
-                    self.mark_portfolio()
-                    self.timestamp_statistics()
-                    self.set_times()
-                    print(f'current time: {self.current_time}')
-                    print(f'portfolio delta: {self.portfolio_delta}')
-                    print(f'cash: {self.cash}, equity: {self.equity}, liabilities: ${self.liabilities}')
+        with trace():
+            for file in self.files:
+                try:
+                    self.load_file_to_dataframe(file)
+                    if failed:
+                        self.set_times(override=True)
+                        failed = None
+                    else:
+                        self.set_times()
                     filtered = self.get_filtered_options()
-            except:
-                print(f'loading {file} failed')
-                add_to_corrupted_files(file)
-                failed = True
-                continue
-        self.plot()
-        add_to_results_files(self.statistics_overtime)
-        print(generate_risk_return_metrics_historical()[-1])
+                    #if self.portfolio_delta >= 200 or self.portfolio_delta <= -200:
+                    #    wdb.set_trace()
+                    while not filtered.empty:
+                        self.add_positions(filtered)
+                        self.mark_portfolio()
+                        self.find_and_close_positions()
+                        self.mark_portfolio()
+                        self.timestamp_statistics()
+                        self.set_times()
+                        if self.equity < 700000:
+                            wdb.set_trace()
+                        print(f'current time: {self.current_time}')
+                        print(f'portfolio delta: {self.portfolio_delta}')
+                        print(f'cash: {self.cash}, equity: {self.equity}, liabilities: ${self.liabilities}')
+                        filtered = self.get_filtered_options()
+                except Exception as e:
+                    print(f'loading {file} failed')
+                    print(f'exception: {e}')
+                    add_to_corrupted_files(file)
+                    failed = True
+                    continue
+            self.plot()
+            add_to_results_files(self.statistics_overtime)
+            print(generate_risk_return_metrics_historical()[-1])
 
     def allocate_funds(self, option, cash):
         option_series = option if (isinstance(option, pd.Series)) else option.iloc[0]
@@ -176,9 +181,10 @@ class Simulation:
         self.write_allocation(option, contracts)
 
     def ensure_mark_pricing(self, row):
-        if percent_difference_ask_bid(row) > 1:
-            days_to_expiration = row['expiration_datetime'] - self.current_time
-            years_to_expiration = timedelta_to_float(days_to_expiration) / 365.25
+        days_to_expiration = row['expiration_datetime'] - self.current_time
+        row['days_to_expiration'] = days_to_expiration
+        years_to_expiration = timedelta_to_float(days_to_expiration) / 365.25
+        if percent_difference_ask_bid(row) > 1 and years_to_expiration > 0:
             bs = BlackScholes(
                 row['type'],
                 row['underlying_price'],
@@ -267,6 +273,8 @@ class Simulation:
 
     def mark_portfolio(self):
         filtered = self.get_filtered_options(time_only=True)
+        expiring = self.positions[self.positions['days_to_expiration'] <= datetime.timedelta(days=0)]
+        self.close_positions(expiring)
         for i, row in self.positions.iterrows():
             symbol = row['symbol']
             f_idx = filtered.symbol.eq(symbol).idxmax()
@@ -293,6 +301,7 @@ class Simulation:
             self.positions.at[i, 'underlying_price'] = filtered_row['underlying_price']
             self.positions.at[i, 'ask_price'] = filtered_row['ask_price']
             self.positions.at[i, 'days_to_expiration'] = days_to_expiration
+        self.positions = self.positions.apply(self.ensure_mark_pricing, axis=1)
         self.positions['position_delta'] = self.positions['num_contracts'] * self.positions['delta']
         self.positions['liability_amount'] = abs(
             self.positions['num_contracts'] * self.positions['mark_price'] * self.positions['underlying_price'])
