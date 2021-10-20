@@ -40,7 +40,7 @@ def ensure_option_series(option):
     return option if (isinstance(option, pd.Series)) else option.iloc[0]
 
 def timedelta_to_float(days_to_expiration):
-    return days_to_expiration.total_seconds() // (3600*24)
+    return days_to_expiration.total_seconds() / (3600*24)
 
 def negative_deltas(df):
     return df[df.delta < 0]
