@@ -7,7 +7,7 @@ import os
 import argparse
 
 COLUMNS = ["symbol", "timestamp", "type", "strike_price", "expiration", "underlying_price", "bid_price", "bid_amount",
-           "ask_price", "ask_amount", "mark_price", "mark_iv", "delta", "theta"]
+           "ask_price", "ask_amount", "mark_price", "mark_iv", "delta", "gamma", "vega", "theta"]
 
 COLUM_TYPES = {
     'symbol': str,
@@ -22,6 +22,8 @@ COLUM_TYPES = {
     'ask_amount': float,
     'mark_price': float,
     'delta': float,
+    'gamma': float,
+    'vega': float,
     'theta': float
 }
 
